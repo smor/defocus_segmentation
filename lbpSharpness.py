@@ -7,7 +7,8 @@ import argparse
 
 
 parser = argparse.ArgumentParser(description='create test images from raw dicom')
-parser.add_argument('--input', help='input image where you want to compute sharpness map', required=True)
+parser.add_argument('-i', '--input', help='input image where you want to compute sharpness map', required=True)
+parser.add_argument('-t', '--threshold', help='LBP threshold', required=False, type=float, default=0.016)
 
 args = vars(parser.parse_args())
 
@@ -94,13 +95,27 @@ def lbpSharpness(im_gray, s, threshold):
 if __name__=='__main__':
 
 	img = cv2.imread(args['input'], cv2.IMREAD_COLOR)
-	img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-	sharpness_map = lbpSharpness(img_gray, 21, 0.016)
+	scale_percent = 60 # percent of original size
+	width = int(img.shape[1] * scale_percent / 100)
+	height = int(img.shape[0] * scale_percent / 100)
+	dim = (width, height)
+	# resize image
+	resized = cv2.resize(img, dim, interpolation = cv2.INTER_AREA)
+
+	img_gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
+
+	#sharpness_map = lbpSharpness(img_gray, 21, 0.016)
+	sharpness_map = lbpSharpness(img_gray, 21, args['threshold'])
 	sharpness_map = (sharpness_map - np.min(sharpness_map))/(np.max(sharpness_map - np.min(sharpness_map)))
 
 	sharpness_map = (sharpness_map*255).astype('uint8')
-	concat = np.concatenate((img, np.stack((sharpness_map,)*3, -1)), axis=1)
+	blur = cv2.GaussianBlur(sharpness_map,(5,5),0)
+	ret, segmented= cv2.threshold(blur,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+
+	concat = np.concatenate((resized, np.stack((segmented,)*3, -1)), axis=1)
+	cv2.namedWindow('img_concat', cv2.WINDOW_NORMAL)
+	cv2.resizeWindow('img_concat', 1920, 768)
 	cv2.imshow('img_concat', concat)
 
 	cv2.waitKey(0)
